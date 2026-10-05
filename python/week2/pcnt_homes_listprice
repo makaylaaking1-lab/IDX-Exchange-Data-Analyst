@@ -1,1 +1,31 @@
+import pandas as pd
 
+sold = pd.read_csv(r"C:/Users/makay/OneDrive/Documents/IDX Internship/new csv/week 2, 3/sold_residential_filtered.csv", low_memory=False)
+
+both = sold[["ClosePrice", "ListPrice"]].apply(pd.to_numeric, errors="coerce").dropna()
+n = len(both)
+
+above = (both["ClosePrice"] > both["ListPrice"]).sum()
+below = (both["ClosePrice"] < both["ListPrice"]).sum()
+at    = (both["ClosePrice"] == both["ListPrice"]).sum()
+
+print(f"above list: {above:,} ({above/n*100:.1f}%)")
+print(f"below list: {below:,} ({below/n*100:.1f}%)")
+print(f"at list:    {at:,} ({at/n*100:.1f}%)")
+print(f"n = {n:,}")
+
+#%% Q: Which counties have the highest median prices?
+
+tmp = sold[["CountyOrParish", "ClosePrice"]].copy()
+tmp["ClosePrice"] = pd.to_numeric(tmp["ClosePrice"], errors="coerce")
+
+by_county = (tmp.dropna()
+             .groupby("CountyOrParish")["ClosePrice"]
+             .agg(["median", "mean", "count"])
+             .sort_values("median", ascending=False))
+
+# All counties
+print(by_county.round(0).to_string())
+
+# Only counties with enough sales to be meaningful
+print(by_county[by_county["count"] >= 100].round(0).to_string())
