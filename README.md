@@ -5,9 +5,9 @@ Code and documentation from my Data Analyst Internship at IDX Exchange, covering
 Week 0 focused on software setup and downloading files from the FTP.
 
 ## Files
-`python/crmls_listed.py` extracts MLS listing data.
-`python/crmls_sold.py` extracts MLS sold data.
-Monthly csv file stored in 'csv'.
+- `python/crmls_listed.py` extracts MLS listing data.
+- `python/crmls_sold.py` extracts MLS sold data.
+- Monthly csv file stored in `csv`.
 
 ## Week 0 Tasks
 - Organized the project files.
