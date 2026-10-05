@@ -35,3 +35,5 @@ Used EDA to analyze the dataset, and inspected the data to make sure only releva
 - Median and average close prices
     - SOLD (median = $823k. average = $1,193, 864.08)
     - LISTING (median = $850k. average = $1, 203, 601.57)
+- Percentage of homes sold above list price: 40.1%
+- Percentage of homes sold below list price: 42.5%
