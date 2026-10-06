@@ -10,7 +10,7 @@ import pandas as pd
 
 # --- Settings ---------------------------------------------------------------
 DATA_DIR = Path(r"C:/Users/makay/OneDrive/Documents/IDX Internship/csv")   # the monthly CSVs
-OUTPUT_DIR = Path(r"C:/Users/makay/OneDrive/Documents/IDX Internship/new csv")        # where results are saved
+OUTPUT_DIR = Path(r"C:/Users/makay/OneDrive/Documents/IDX Internship/new csv/week 2, 3")        # where results are saved
 
 START, END = "2024-01", "2026-04"
 
@@ -84,8 +84,6 @@ def analyze(pattern, label, outfile):
     print(f"\nColumns above 90% null ({len(over_90)}):")
     print(over_90.to_string() if len(over_90) else "  none")
 
-    nulls.to_csv(OUTPUT_DIR / f"null_report_{label.lower()}.csv")
-
     # --- Numeric distribution summary ---------------------------------------
     print("\nNumeric distribution summary:")
     rows = {}
@@ -106,7 +104,6 @@ def analyze(pattern, label, outfile):
 
     summary = pd.DataFrame(rows).T.round(2)
     print(summary.to_string())
-    summary.to_csv(OUTPUT_DIR / f"distribution_summary_{label.lower()}.csv")
 
     # --- Save the filtered dataset ------------------------------------------
     df.to_csv(OUTPUT_DIR / outfile, index=False)
@@ -119,4 +116,3 @@ analyze(SOLD_PATTERN, "Sold", "sold_residential_filtered.csv")
 analyze(LISTINGS_PATTERN, "Listings", "listings_residential_filtered.csv")
 
 print("\nDone.")
-
