@@ -37,3 +37,12 @@ Used EDA to analyze the dataset, and inspected the data to make sure only releva
     - LISTING (median = $850k. average = $1, 203, 601.57)
 - Percentage of homes sold above list price: 40.1%
 - Percentage of homes sold below list price: 42.5%
+
+# Week 3
+Fetched live data from a public API (FRED), left merging external economic data onto a transaction dataset.
+
+## Week 3 Tasks
+- Learned the background of FRED how to fetch live data from it.
+- Resampled time-series data from weekly to monthly frequency.
+- Merged them with `listings_residential_filtered.csv` and `sold_residential_filtered.csv`.
+- Validated the merge with null checks.
