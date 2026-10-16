@@ -47,13 +47,15 @@ Fetched live data from a public API (FRED), left merging external economic data 
 - Merged them with `listings_residential_filtered.csv` and `sold_residential_filtered.csv`.
 - Validated the merge with null checks.
 
-# Week 4
-Data cleaning and flagging invalid numeric values.
+# Week 4 & 5
+Data cleaning, flagging invalid numeric values, checking data consistency.
 
-## Week 4 tasks
+## Week 4 Tasks
 - Converted date fields to datetime format.
 - Removed columns over 90% null (may remove more).
 - Flagged invalid values
   - in SOLD: 3 columns containing invalid information.
   - in LISTINGS: 2 columns containing invalid information.
 - Listed the number of rows and columns before and after cleaning.
+
+## Week 5 Tasks
