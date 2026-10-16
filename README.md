@@ -46,3 +46,14 @@ Fetched live data from a public API (FRED), left merging external economic data 
 - Resampled time-series data from weekly to monthly frequency.
 - Merged them with `listings_residential_filtered.csv` and `sold_residential_filtered.csv`.
 - Validated the merge with null checks.
+
+# Week 4
+Data cleaning and flagging invalid numeric values.
+
+## Week 4 tasks
+- Converted date fields to datetime format.
+- Removed columns over 90% null (may remove more).
+- Flagged invalid values
+  - in SOLD: 3 columns containing invalid information.
+  - in LISTINGS: 2 columns containing invalid information.
+- Listed the number of rows and columns before and after cleaning.
