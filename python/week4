@@ -1,0 +1,172 @@
+"""
+Weeks 4-5 - Data Cleaning and Preparation (Part 1: Tasks)
+
+  - Convert date fields to datetime format
+  - Remove unnecessary or redundant columns
+  - Handle missing values
+  - Ensure numeric fields are properly typed
+  - Flag invalid numeric values
+
+Input:  sold_with_rates.csv, listings_with_rates.csv  (from the Week 2-3 merge)
+Output: sold_cleaned.csv, listings_cleaned.csv
+"""
+
+import pandas as pd
+
+IN_DIR = r"C:\Users\makay\OneDrive\Documents\IDX Internship\new csv\week 2, 3"
+OUT_DIR = r"C:\Users\makay\OneDrive\Documents\IDX Internship\new csv\week 4, 5"
+
+FILES = [
+    ("sold_with_rates.csv", "sold_cleaned.csv", "SOLD"),
+    ("listings_with_rates.csv", "listings_cleaned.csv", "LISTINGS"),
+]
+
+DATE_COLS = [
+    "CloseDate",
+    "PurchaseContractDate",
+    "ListingContractDate",
+    "ContractStatusChangeDate",
+]
+
+NUMERIC_COLS = [
+    "ClosePrice", "ListPrice", "OriginalListPrice",
+    "LivingArea", "LotSizeAcres", "LotSizeSquareFeet", "BuildingAreaTotal",
+    "BedroomsTotal", "BathroomsTotalInteger", "MainLevelBedrooms",
+    "DaysOnMarket", "YearBuilt", "GarageSpaces", "ParkingTotal",
+    "AssociationFee", "TaxAnnualAmount", "Latitude", "Longitude",
+]
+
+pd.set_option("display.max_rows", 200)
+pd.set_option("display.width", 200)
+
+
+def clean(infile, outfile, label):
+    print(f"\n{'=' * 70}\n{label}\n{'=' * 70}")
+
+    df = pd.read_csv(IN_DIR + "\\" + infile, low_memory=False)
+    rows_before = len(df)
+    cols_before = df.shape[1]
+    print(f"Before cleaning: {rows_before:,} rows x {cols_before} columns")
+
+    # ------------------------------------------------------------------
+    # 1. Convert date fields to datetime format
+    # ------------------------------------------------------------------
+    print("\n1. DATE CONVERSION")
+    for col in DATE_COLS:
+        if col not in df.columns:
+            print(f"   {col}: not present")
+            continue
+        before_nulls = df[col].isna().sum()
+        df[col] = pd.to_datetime(df[col], errors="coerce")
+        after_nulls = df[col].isna().sum()
+        unparseable = after_nulls - before_nulls
+        print(f"   {col}: -> datetime64  "
+              f"({unparseable:,} values could not be parsed)")
+
+    # ------------------------------------------------------------------
+    # 2. Remove unnecessary or redundant columns
+    #    Two kinds, both safe to drop:
+    #    (a) duplicate columns the export script produced - pandas renamed
+    #        them with a .1 suffix; verified to hold identical values
+    #    (b) columns that are over 90% empty
+    # ------------------------------------------------------------------
+    print("\n2. COLUMN REMOVAL")
+ 
+    dupes = [c for c in df.columns if c.endswith(".1")]
+    if dupes:
+        df = df.drop(columns=dupes)
+        print(f"   Dropped {len(dupes)} duplicate columns: {dupes}")
+    else:
+        print("   No duplicate (.1) columns found")
+ 
+    NULL_THRESHOLD = 90   # drop columns more than 90% null
+    
+    null_pct = df.isna().mean() * 100
+    too_empty = null_pct[null_pct > NULL_THRESHOLD].sort_values(ascending=False)
+    if len(too_empty):
+        df = df.drop(columns=too_empty.index)
+        print(f"   Dropped {len(too_empty)} columns over {NULL_THRESHOLD}% null:")
+        print(too_empty.round(2).to_string())
+    else:
+        print(f"   No columns over {NULL_THRESHOLD}% null")
+
+    # ------------------------------------------------------------------
+    # 3. Handle missing values
+    #    Nothing is imputed here. Filling a missing price or square footage
+    #    with a guess would invent data, and which fields (if any) should be
+    #    filled is an analysis decision, not a cleaning one. Columns that
+    #    were entirely empty are already gone; the rest are reported so the
+    #    remaining gaps are known and documented.
+    # ------------------------------------------------------------------
+    print("\n3. MISSING VALUES (reported, not imputed)")
+    missing = pd.DataFrame({
+        "null_count": df.isna().sum(),
+        "null_pct": (df.isna().mean() * 100).round(2),
+    })
+    missing = missing[missing["null_count"] > 0].sort_values(
+        "null_pct", ascending=False
+    )
+    print(f"   {len(missing)} columns still contain missing values:")
+    print(missing.to_string())
+
+    # ------------------------------------------------------------------
+    # 4. Ensure numeric fields are properly typed
+    # ------------------------------------------------------------------
+    print("\n4. NUMERIC TYPING")
+    for col in NUMERIC_COLS:
+        if col not in df.columns:
+            continue
+        old_type = df[col].dtype
+        before_nulls = df[col].isna().sum()
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        coerced = df[col].isna().sum() - before_nulls
+        note = f"  ({coerced:,} non-numeric values set to NaN)" if coerced else ""
+        print(f"   {col}: {old_type} -> {df[col].dtype}{note}")
+
+    # ------------------------------------------------------------------
+    # 5. Flag invalid numeric values
+    #    Flagged rather than removed, so no rows are lost and the decision
+    #    to exclude them stays with whoever runs the analysis.
+    # ------------------------------------------------------------------
+    print("\n5. INVALID NUMERIC VALUES (flagged, not removed)")
+
+    rules = {
+        "invalid_closeprice_flag":   ("ClosePrice", lambda s: s <= 0),
+        "invalid_livingarea_flag":   ("LivingArea", lambda s: s <= 0),
+        "invalid_dom_flag":          ("DaysOnMarket", lambda s: s < 0),
+        "invalid_bedrooms_flag":     ("BedroomsTotal", lambda s: s < 0),
+        "invalid_bathrooms_flag":    ("BathroomsTotalInteger", lambda s: s < 0),
+    }
+
+    for flag_name, (col, test) in rules.items():
+        if col not in df.columns:
+            print(f"   {flag_name}: {col} not present")
+            continue
+        df[flag_name] = test(df[col]).fillna(False)
+        print(f"   {flag_name}: {df[flag_name].sum():,} rows flagged")
+
+    flag_cols = [c for c in df.columns if c.startswith("invalid_")]
+    any_invalid = df[flag_cols].any(axis=1).sum()
+    print(f"   rows with at least one invalid value: {any_invalid:,} "
+          f"({any_invalid / len(df) * 100:.2f}%)")
+
+    # ------------------------------------------------------------------
+    # Summary and save
+    # ------------------------------------------------------------------
+    print(f"\nAfter cleaning: {len(df):,} rows x {df.shape[1]} columns")
+    print(f"   rows:    {rows_before:,} -> {len(df):,}  (no rows removed)")
+    print(f"   columns: {cols_before} -> {df.shape[1]}")
+
+    print("\nData types after cleaning:")
+    print(df.dtypes.value_counts().to_string())
+
+    df.to_csv(OUT_DIR + "\\" + outfile, index=False)
+    print(f"\nSaved: {outfile}")
+
+    return df
+
+
+for infile, outfile, label in FILES:
+    clean(infile, outfile, label)
+
+print("\nDone. (Part 2 covers date consistency and geographic checks.)")
