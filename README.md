@@ -29,7 +29,7 @@ Load and concatenate monthly listing and sold datasets for analysis.
 Used EDA to analyze the dataset, and inspected the data to make sure only relevant property records are used.
 
 ## Week 2 Tasks
-- ***market analysis & metadata, flagged columns that were >90% null, identified number of rows and columns, and decided which columns to drop.
+- Flagged columns that were >90% null, identified number of rows and columns, and decided which columns to drop.
 - Produced a numeric distribution summary with the .py script.
 - Created visualizations.
 - Median and average close prices
