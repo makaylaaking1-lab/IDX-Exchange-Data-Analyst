@@ -1,0 +1,177 @@
+"""
+Weeks 4-5 - Data Cleaning and Preparation (Part 2: Consistency Checks)
+
+Covers the two Checks sections:
+  - Date Consistency Checks  -> listing_after_close_flag,
+                                purchase_after_close_flag,
+                                negative_timeline_flag
+  - Geographic Data Checks   -> missing / sentinel / positive-longitude /
+                                out-of-state coordinate flags
+
+Input:  sold_cleaned.csv, listings_cleaned.csv   (from Part 1)
+Output: sold_final.csv, listings_final.csv
+"""
+
+import pandas as pd
+
+IN_DIR = r"C:/Users/makay/OneDrive/Documents/IDX Internship/new csv/week 4, 5"
+OUT_DIR = r"C:/Users/makay/OneDrive/Documents/IDX Internship/new csv/week 4, 5"
+
+FILES = [
+    ("sold_cleaned.csv", "sold_final.csv", "SOLD"),
+    ("listings_cleaned.csv", "listings_final.csv", "LISTINGS"),
+]
+
+DATE_COLS = [
+    "CloseDate",
+    "PurchaseContractDate",
+    "ListingContractDate",
+    "ContractStatusChangeDate",
+]
+
+# Approximate bounding box for California. Anything outside this is either
+# out of state or an implausible coordinate.
+CA_LAT_MIN, CA_LAT_MAX = 32.5, 42.1
+CA_LON_MIN, CA_LON_MAX = -124.5, -114.1
+
+pd.set_option("display.width", 200)
+
+
+def check(infile, outfile, label):
+    print(f"\n{'=' * 70}\n{label}\n{'=' * 70}")
+
+    df = pd.read_csv(IN_DIR + "\\" + infile, low_memory=False)
+    rows_before = len(df)
+    cols_before = df.shape[1]
+    print(f"Before checks: {rows_before:,} rows x {cols_before} columns")
+
+    # Saving to CSV turns datetimes back into text, so re-parse them.
+    for col in DATE_COLS:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
+
+    # ==================================================================
+    # DATE CONSISTENCY CHECKS
+    #
+    # Expected order: ListingContractDate -> PurchaseContractDate -> CloseDate
+    #
+    # Comparisons involving a missing date produce False, not True, so a
+    # row is only flagged when both dates exist and are genuinely out of
+    # order. A missing date is incomplete, not inconsistent.
+    # ==================================================================
+    print("\nDATE CONSISTENCY CHECKS")
+
+    df["listing_after_close_flag"] = (
+        df["ListingContractDate"] > df["CloseDate"]
+    ).fillna(False)
+
+    df["purchase_after_close_flag"] = (
+        df["PurchaseContractDate"] > df["CloseDate"]
+    ).fillna(False)
+
+    df["negative_timeline_flag"] = (
+        df["ListingContractDate"] > df["PurchaseContractDate"]
+    ).fillna(False)
+
+    date_flags = [
+        "listing_after_close_flag",
+        "purchase_after_close_flag",
+        "negative_timeline_flag",
+    ]
+
+    for flag in date_flags:
+        n = df[flag].sum()
+        print(f"   {flag}: {n:,} rows ({n / len(df) * 100:.3f}%)")
+
+    any_date_issue = df[date_flags].any(axis=1).sum()
+    print(f"   rows with any date inconsistency: {any_date_issue:,} "
+          f"({any_date_issue / len(df) * 100:.3f}%)")
+
+    # How often each comparison could not be made, because a date was blank
+    print("\n   comparisons skipped due to missing dates:")
+    for a, b, name in [
+        ("ListingContractDate", "CloseDate", "listing vs close"),
+        ("PurchaseContractDate", "CloseDate", "purchase vs close"),
+        ("ListingContractDate", "PurchaseContractDate", "listing vs purchase"),
+    ]:
+        skipped = (df[a].isna() | df[b].isna()).sum()
+        print(f"      {name}: {skipped:,}")
+
+    # ==================================================================
+    # GEOGRAPHIC DATA CHECKS
+    # ==================================================================
+    print("\nGEOGRAPHIC DATA CHECKS")
+
+    lat = pd.to_numeric(df["Latitude"], errors="coerce")
+    lon = pd.to_numeric(df["Longitude"], errors="coerce")
+
+    # Missing coordinates
+    df["missing_coords_flag"] = lat.isna() | lon.isna()
+
+    # Exact zeros, which MLS systems use as a stand-in for "no value".
+    # A real 0,0 coordinate is in the Atlantic Ocean off Africa.
+    df["zero_coords_flag"] = ((lat == 0) | (lon == 0)).fillna(False)
+
+    # California longitudes are always negative. A positive one is a
+    # dropped minus sign.
+    df["positive_longitude_flag"] = (lon > 0).fillna(False)
+
+    # Outside the California bounding box. Excludes rows already caught
+    # above so each row is attributed to one cause.
+    outside_box = (
+        (lat < CA_LAT_MIN) | (lat > CA_LAT_MAX)
+        | (lon < CA_LON_MIN) | (lon > CA_LON_MAX)
+    ).fillna(False)
+    df["out_of_state_coords_flag"] = (
+        outside_box
+        & ~df["zero_coords_flag"]
+        & ~df["positive_longitude_flag"]
+    )
+
+    geo_flags = [
+        "missing_coords_flag",
+        "zero_coords_flag",
+        "positive_longitude_flag",
+        "out_of_state_coords_flag",
+    ]
+
+    for flag in geo_flags:
+        n = df[flag].sum()
+        print(f"   {flag}: {n:,} rows ({n / len(df) * 100:.3f}%)")
+
+    any_geo_issue = df[geo_flags].any(axis=1).sum()
+    usable = len(df) - any_geo_issue
+    print(f"   rows with any coordinate problem: {any_geo_issue:,} "
+          f"({any_geo_issue / len(df) * 100:.3f}%)")
+    print(f"   rows with usable California coordinates: {usable:,} "
+          f"({usable / len(df) * 100:.2f}%)")
+
+    # Range of the coordinates that passed every check
+    good = ~df[geo_flags].any(axis=1)
+    if good.any():
+        print(f"   valid latitude range:  "
+              f"{lat[good].min():.4f} to {lat[good].max():.4f}")
+        print(f"   valid longitude range: "
+              f"{lon[good].min():.4f} to {lon[good].max():.4f}")
+
+    # ==================================================================
+    # SUMMARY
+    # ==================================================================
+    print(f"\nAfter checks: {len(df):,} rows x {df.shape[1]} columns")
+    print(f"   rows:    {rows_before:,} -> {len(df):,}  (no rows removed)")
+    print(f"   columns: {cols_before} -> {df.shape[1]}  "
+          f"({len(date_flags) + len(geo_flags)} flag columns added)")
+
+    print("\nData types:")
+    print(df.dtypes.value_counts().to_string())
+
+    df.to_csv(OUT_DIR + "\\" + outfile, index=False)
+    print(f"\nSaved: {outfile}")
+
+    return df
+
+
+for infile, outfile, label in FILES:
+    check(infile, outfile, label)
+
+print("\nDone.")
