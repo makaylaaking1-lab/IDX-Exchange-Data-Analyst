@@ -59,3 +59,5 @@ Data cleaning, flagging invalid numeric values, checking data consistency.
 - Listed the number of rows and columns before and after cleaning.
 
 ## Week 5 Tasks
+- Checked for date and geographical data inconsistencies.
+- Prepared and cleaned my datasets for analysis.
