@@ -1,0 +1,221 @@
+"""
+Week 6 - Feature Engineering and Market Metrics
+
+Engineers the key market metrics, adds school districts from the California
+Department of Education district-areas dataset, and produces segmented
+summary tables.
+
+Input:  sold_final.csv, listings_final.csv   (from Weeks 4-5 Part 2)
+Output: sold_week6.csv, listings_week6.csv
+
+NOTE ON THE PRICE RATIO FORMULAS
+The handbook's metrics table gives ClosePrice / OriginalListPrice for both
+"Price Ratio" (negotiation strength) and "Close to Original List Ratio"
+(full price reduction history). Those would be the same column, so this
+script reads Price Ratio as ClosePrice / ListPrice - the most recent asking
+price, which is what a negotiation is against - and keeps
+ClosePrice / OriginalListPrice for the original-list ratio.
+"""
+
+import pandas as pd
+
+# --- Settings ---------------------------------------------------------------
+IN_DIR = r"C:/Users/makay/OneDrive/Documents/IDX Internship/new csv/week 4, 5"
+OUT_DIR = r"C:/Users/makay/OneDrive/Documents/IDX Internship/new csv/week 6"
+
+# Path to the California school district GeoJSON. Download from:
+#   https://data.ca.gov/dataset/california-school-district-areas-2024-25
+# Set to None to skip the school district section.
+SCHOOL_GEOJSON = r"C:/Users/makay/OneDrive/Documents/IDX Internship/new csv/week 6/GeoJSON.geojson"
+
+FILES = [
+    ("sold_final.csv", "sold_week6.csv", "SOLD"),
+    ("listings_final.csv", "listings_week6.csv", "LISTINGS"),
+]
+
+DATE_COLS = ["CloseDate", "PurchaseContractDate", "ListingContractDate"]
+
+pd.set_option("display.width", 220)
+pd.set_option("display.max_columns", 50)
+
+
+# ============================================================================
+# FEATURE ENGINEERING
+# ============================================================================
+def add_metrics(df, label):
+    print(f"\n{'=' * 72}\n{label} - ENGINEERED METRICS\n{'=' * 72}")
+    print(f"Rows: {len(df):,}")
+
+    # CSV round-trip turns datetimes back into text
+    for col in DATE_COLS:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
+
+    # --- Price Ratio: negotiation strength ---------------------------------
+    # Close price against the most recent asking price.
+    df["PriceRatio"] = df["ClosePrice"] / df["ListPrice"]
+
+    # --- Close to Original List Ratio: full price reduction history --------
+    # Close price against the first asking price, so it captures every
+    # reduction made along the way.
+    df["CloseToOriginalListRatio"] = df["ClosePrice"] / df["OriginalListPrice"]
+
+    # --- Price Per Square Foot: normalises price across sizes --------------
+    df["PricePerSqFt"] = df["ClosePrice"] / df["LivingArea"]
+
+    # --- Days on Market: raw field, no calculation needed ------------------
+    # DaysOnMarket is used as supplied by the MLS.
+
+    # --- Year / Month / YrMo: enables time-series analysis -----------------
+    df["Year"] = df["CloseDate"].dt.year
+    df["Month"] = df["CloseDate"].dt.month
+    df["YrMo"] = df["CloseDate"].dt.to_period("M")
+
+    # --- Listing to Contract Days: time from listing to accepted offer -----
+    df["ListingToContractDays"] = (
+        df["PurchaseContractDate"] - df["ListingContractDate"]
+    ).dt.days
+
+    # --- Contract to Close Days: escrow and closing duration ---------------
+    df["ContractToCloseDays"] = (
+        df["CloseDate"] - df["PurchaseContractDate"]
+    ).dt.days
+
+    new_cols = [
+        "PriceRatio", "CloseToOriginalListRatio", "PricePerSqFt",
+        "DaysOnMarket", "Year", "Month", "YrMo",
+        "ListingToContractDays", "ContractToCloseDays",
+    ]
+
+    # How completely each new column populated. In listings most of these
+    # are null because the property has not closed, so there is no
+    # ClosePrice or CloseDate to compute from.
+    print("\nPopulation of new columns:")
+    for col in new_cols:
+        n = df[col].notna().sum()
+        print(f"   {col:<26} {n:>9,} of {len(df):,}  ({n / len(df) * 100:5.1f}%)")
+
+    return df, new_cols
+
+
+def sample_table(df, new_cols, label):
+    """Sample output showing the new columns populated correctly."""
+    print(f"\n{label} - SAMPLE OF NEW COLUMNS (rows with values present)")
+
+    populated = df[df["PriceRatio"].notna()]
+    if populated.empty:
+        print("   no rows with a computable PriceRatio")
+        return
+
+    show = ["ClosePrice", "ListPrice", "OriginalListPrice", "LivingArea"] + new_cols
+    show = [c for c in show if c in df.columns]
+    print(populated[show].head(10).to_string())
+
+
+# ============================================================================
+# SCHOOL DISTRICTS (spatial join on latitude / longitude)
+# ============================================================================
+def add_school_districts(df, label):
+    """Match each property to the school district polygon containing it.
+
+    The CDE dataset has three district types that overlap: a property can
+    sit inside one Unified district, OR inside both an Elementary and a High
+    district. Joining all three at once would duplicate rows, so each type is
+    joined separately and returned as its own column.
+    """
+    import geopandas as gpd
+
+    print(f"\n{label} - SCHOOL DISTRICT JOIN")
+
+    schools = gpd.read_file(SCHOOL_GEOJSON)[
+        ["DistrictName", "DistrictType", "geometry"]
+    ]
+
+    # Build point geometry from the property coordinates. EPSG:4326 is the
+    # standard lat/lon coordinate system.
+    points = gpd.GeoDataFrame(
+        df,
+        geometry=gpd.points_from_xy(df["Longitude"], df["Latitude"]),
+        crs="EPSG:4326",
+    )
+
+    for dtype, newcol in [
+        ("Elementary", "ElementaryDistrict_CDE"),
+        ("High", "HighDistrict_CDE"),
+        ("Unified", "UnifiedDistrict_CDE"),
+    ]:
+        subset = schools[schools["DistrictType"] == dtype].to_crs(points.crs)
+        joined = gpd.sjoin(points, subset, how="left", predicate="within")
+
+        # A point on a shared boundary can match two polygons, which would
+        # add rows. Keep the first match per property so the row count holds.
+        joined = joined[~joined.index.duplicated(keep="first")]
+
+        df[newcol] = joined["DistrictName"]
+        n = df[newcol].notna().sum()
+        print(f"   {newcol:<24} matched {n:>9,} of {len(df):,} "
+              f"({n / len(df) * 100:5.1f}%)")
+
+    # A property is covered if it falls in a Unified district, or in both an
+    # Elementary and a High district.
+    unmatched = (
+        df["ElementaryDistrict_CDE"].isna()
+        & df["HighDistrict_CDE"].isna()
+        & df["UnifiedDistrict_CDE"].isna()
+    ).sum()
+    print(f"   matched to no district at all: {unmatched:,} "
+          f"({unmatched / len(df) * 100:.2f}%)")
+    print("   (expected for the rows with missing or invalid coordinates)")
+
+    return df
+
+
+# ============================================================================
+# SEGMENT ANALYSIS
+# ============================================================================
+def segment_summaries(df, label):
+    print(f"\n{label} - SEGMENT SUMMARIES")
+
+    metrics = [
+        "ClosePrice", "PriceRatio", "CloseToOriginalListRatio",
+        "PricePerSqFt", "DaysOnMarket",
+        "ListingToContractDays", "ContractToCloseDays",
+    ]
+    metrics = [m for m in metrics if m in df.columns]
+
+    for dim in ["PropertyType", "PropertySubType", "CountyOrParish"]:
+        if dim not in df.columns:
+            continue
+        summary = (
+            df.groupby(dim)[metrics]
+            .median()
+            .round(2)
+            .assign(n=df.groupby(dim).size())
+            .sort_values("n", ascending=False)
+        )
+        print(f"\n--- median by {dim} (top 15 by volume) ---")
+        print(summary.head(15).to_string())
+
+
+# ============================================================================
+# RUN
+# ============================================================================
+for infile, outfile, label in FILES:
+    df = pd.read_csv(IN_DIR + "\\" + infile, low_memory=False)
+
+    df, new_cols = add_metrics(df, label)
+    sample_table(df, new_cols, label)
+
+    if SCHOOL_GEOJSON:
+        try:
+            df = add_school_districts(df, label)
+        except ImportError:
+            print(f"\n{label} - SCHOOL DISTRICT JOIN SKIPPED "
+                  "(geopandas not installed; run: pip install geopandas)")
+
+    segment_summaries(df, label)
+
+    df.to_csv(OUT_DIR + "\\" + outfile, index=False)
+    print(f"\nSaved: {outfile}  ({len(df):,} rows x {df.shape[1]} columns)")
+
+print("\nDone.")
