@@ -61,3 +61,12 @@ Data cleaning, flagging invalid numeric values, checking data consistency.
 ## Week 5 Tasks
 - Checked for date and geographical data inconsistencies.
 - Prepared and cleaned my datasets for analysis.
+
+# Week 6
+Engineering the key market indicators that power the Tableau dashboards.
+
+## Week 6 Tasks
+- Installed geopandas to reference the California school districts.
+- Added school districts using the properties' latitude and longitude values.
+- Created key metrics.
+- Generated summary statistics for different market segments.
